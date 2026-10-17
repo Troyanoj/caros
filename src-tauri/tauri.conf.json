@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "caros",
-        "width": 800,
-        "height": 600
+        "title": "CarOS",
+        "width": 1024,
+        "height": 768,
+        "fullscreen": false,
+        "resizable": false
       }
     ],
     "security": {

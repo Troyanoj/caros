@@ -1,0 +1,28 @@
+{
+  "version": 8,
+  "name": "CarOS Offline",
+  "center": [0, 0],
+  "zoom": 2,
+  "pitch": 0,
+  "bearing": 0,
+  "sources": {
+    "osm-tiles": {
+      "type": "raster",
+      "tiles": ["http://127.0.0.1:8765/tiles/{z}/{x}/{y}"],
+      "tileSize": 256
+    }
+  },
+  "sprite": "",
+  "glyphs": "http://127.0.0.1:8765/glyphs/{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "osm-tiles",
+      "type": "raster",
+      "source": "osm-tiles",
+      "paint": {
+        "raster-brightness-min": 0.6,
+        "raster-brightness-max": 1.0
+      }
+    }
+  ]
+}
