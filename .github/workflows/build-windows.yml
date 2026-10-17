@@ -1,0 +1,39 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-msvc
+      
+      - name: Install frontend dependencies
+        run: npm install
+      
+      - name: Install Tauri CLI
+        run: npm install --save-dev @tauri-apps/cli
+      
+      - name: Build Windows installer
+        run: npx tauri build
+      
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: caros-windows-installer
+          path: src-tauri/target/release/bundle/msi/*.msi
+          retention-days: 30
