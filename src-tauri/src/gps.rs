@@ -20,14 +20,23 @@ pub struct GpsDevice {
 }
 
 pub fn scan_serial_ports() -> Vec<GpsDevice> {
+    println!("[gps] Escaneando puertos seriales...");
     let ports = serialport::available_ports().unwrap_or_default();
-    ports
+
+    let filtered: Vec<_> = ports
         .into_iter()
         .filter(|p| {
-            p.port_name.contains("ttyUSB") ||
-            p.port_name.contains("ttyACM") ||
-            p.port_name.contains("COM")
+            p.port_name.contains("ttyUSB")
+                || p.port_name.contains("ttyACM")
+                || p.port_name.contains("COM")
         })
+        .collect();
+
+    let port_names: Vec<_> = filtered.iter().map(|p| &p.port_name).collect();
+    println!("[gps] Puertos encontrados: {:?}", port_names);
+
+    filtered
+        .into_iter()
         .map(|p| GpsDevice {
             port_name: p.port_name,
             vendor: "Unknown".to_string(),
@@ -134,6 +143,8 @@ fn parse_nmea_coordinate(value: &str, hemisphere: &str) -> Option<f64> {
 }
 
 pub fn read_gps_from_port(port_name: &str) -> Result<GpsData, String> {
+    println!("[gps] Leyendo GPS desde puerto: {}", port_name);
+
     let port = serialport::new(port_name, 4800)
         .timeout(Duration::from_secs(5))
         .open()
@@ -149,6 +160,10 @@ pub fn read_gps_from_port(port_name: &str) -> Result<GpsData, String> {
             Ok(_) => {
                 if let Some(gps_data) = parse_nmea_sentence(&line) {
                     if gps_data.valid {
+                        println!(
+                            "[gps] GPS válido recibido: lat={}, lng={}",
+                            gps_data.latitude, gps_data.longitude
+                        );
                         return Ok(gps_data);
                     }
                 }
@@ -160,16 +175,27 @@ pub fn read_gps_from_port(port_name: &str) -> Result<GpsData, String> {
 
 #[tauri::command]
 pub fn get_gps_position() -> Result<GpsData, String> {
+    println!("[gps] Solicitada posición GPS actual");
     let ports = scan_serial_ports();
 
+    if ports.is_empty() {
+        println!("[gps] No se encontraron puertos GPS");
+    }
+
     for port in ports {
+        println!("[gps] Intentando leer del puerto: {}", port.port_name);
         if let Ok(gps_data) = read_gps_from_port(&port.port_name) {
             if gps_data.valid {
+                println!(
+                    "[gps] GPS válido: lat={}, lng={}, speed={}km/h",
+                    gps_data.latitude, gps_data.longitude, gps_data.speed_kmh
+                );
                 return Ok(gps_data);
             }
         }
     }
 
+    println!("[gps] No se obtuvo datos GPS válidos de ningún puerto");
     Err("No valid GPS data from any serial port".to_string())
 }
 
