@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serialport::SerialPort;
 use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
