@@ -3,6 +3,7 @@
 	import { gpsStore } from "$lib/stores/gpsStore";
 	import { type Map as MapLibreMap, type Marker, type LngLatLike, type StyleSpecification } from "maplibre-gl";
 	import type { GpsData } from "$lib/stores/gpsStore";
+	import ServerStatus from "./ServerStatus.svelte";
 
 	import "maplibre-gl/dist/maplibre-gl.css";
 	import "$lib/styles/global.css";
@@ -112,6 +113,7 @@
 	<div class="map-container">
 		<div bind:this={mapContainer} class="map-element"></div>
 	</div>
+	<ServerStatus />
 </div>
 
 <style>

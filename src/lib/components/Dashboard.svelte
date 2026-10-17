@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { gpsStore } from "$lib/stores/gpsStore";
 	import { onNavigate } from "$app/navigation";
+	import ServerStatus from "./ServerStatus.svelte";
 
 	function handleNavigate(path: string): void {
 		if (path === "/navigate") {
@@ -35,6 +36,7 @@
 			<span class="nav-button-label">Gasolinera</span>
 		</button>
 	</div>
+	<ServerStatus />
 </main>
 
 <style>
