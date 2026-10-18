@@ -29,4 +29,16 @@ export default defineConfig(() => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+
+  // 4. optimizeDeps for maplibre-gl (WASM handling)
+  optimizeDeps: {
+    exclude: ["maplibre-gl"],
+    include: [],
+  },
+
+  // 5. build optimizations for Tauri
+  build: {
+    target: "es2022",
+    minify: true,
+  },
 }));

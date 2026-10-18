@@ -49,21 +49,17 @@ export function navigateTo(path: string): void {
 	goto(path);
 }
 
-export function getGpsStore() {
-	return {
-		get gpsData() {
-			return gpsData;
-		},
-		get isLoading() {
-			return isLoading;
-		},
-		get error() {
-			return error;
-		},
-		startPolling: startGpsPolling,
-		stopPolling: stopGpsPolling,
-		navigateTo,
-	};
-}
-
-export const gpsStore = getGpsStore();
+export const gpsStore = {
+	get gpsData() {
+		return gpsData;
+	},
+	get isLoading() {
+		return isLoading;
+	},
+	get error() {
+		return error;
+	},
+	startPolling: startGpsPolling,
+	stopPolling: stopGpsPolling,
+	navigateTo,
+};

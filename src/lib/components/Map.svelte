@@ -12,18 +12,28 @@
 
 	const mapStyle: StyleSpecification = mapStyleData as unknown as StyleSpecification;
 
-	let mapContainer: HTMLDivElement;
+	let mapContainer = $state<HTMLDivElement | null>(null);
 	let map: MapLibreMap | null = null;
 	let marker: Marker | null = null;
 	let mapReady = $state(false);
+	let mapError: string | null = $state(null);
 
 	const TILE_SERVER_URL = "http://127.0.0.1:8765";
 	const defaultCenter: LngLatLike = [-77.0365, 38.8977];
+	let lastFlyTo = 0;
+	const FLY_TO_THROTTLE_MS = 5000;
 
 	function watchGpsPosition(): void {
 		const currentGps = gpsStore.gpsData;
 		if (!currentGps || !currentGps.valid || !mapReady || !marker || !map) return;
 
+		const now = Date.now();
+		if (now - lastFlyTo < FLY_TO_THROTTLE_MS) {
+			marker.setLngLat([currentGps.longitude, currentGps.latitude]);
+			return;
+		}
+
+		lastFlyTo = now;
 		const newPosition: LngLatLike = [currentGps.longitude, currentGps.latitude];
 		marker.setLngLat(newPosition);
 		map.flyTo({
@@ -35,8 +45,8 @@
 	}
 
 	$effect(() => {
-		gpsStore.gpsData;
-		if (gpsStore.gpsData?.valid && mapReady && marker && map) {
+		const gps = gpsStore.gpsData;
+		if (gps?.valid && mapReady && marker && map) {
 			watchGpsPosition();
 		}
 	});
@@ -44,38 +54,44 @@
 	async function initMap(): Promise<void> {
 		if (!mapContainer) return;
 
-		const { Map, Marker } = await import("maplibre-gl");
+		try {
+			const { Map, Marker } = await import("maplibre-gl");
 
-		map = new Map({
-			container: mapContainer,
-			style: {
-				...mapStyle,
-				glyphs: `${TILE_SERVER_URL}/glyphs/{fontstack}/{range}.pbf`,
-				sources: {
-					...mapStyle.sources,
+			map = new Map({
+				container: mapContainer,
+				style: {
+					...mapStyle,
+					glyphs: `${TILE_SERVER_URL}/glyphs/{fontstack}/{range}.pbf`,
+					sources: {
+						...mapStyle.sources,
+					},
 				},
-			},
-			center: defaultCenter,
-			zoom: 15,
-			pitch: 0,
-		});
+				center: defaultCenter,
+				zoom: 15,
+				pitch: 0,
+			});
 
-		map.on("load", () => {
-			mapReady = true;
+			map.on("load", () => {
+				mapReady = true;
 
-			const markerEl = document.createElement("div");
-			markerEl.className = "gps-marker";
+				const markerEl = document.createElement("div");
+				markerEl.className = "gps-marker";
 
-			marker = new Marker(markerEl)
-				.setLngLat(gpsStore.gpsData ? [gpsStore.gpsData.longitude, gpsStore.gpsData.latitude] : defaultCenter)
-				.addTo(map!);
+				marker = new Marker(markerEl)
+					.setLngLat(gpsStore.gpsData ? [gpsStore.gpsData.longitude, gpsStore.gpsData.latitude] : defaultCenter)
+					.addTo(map!);
 
-			watchGpsPosition();
-		});
+				watchGpsPosition();
+			});
 
-		map.on("error", (e) => {
-			console.error("MapLibre error:", e);
-		});
+			map.on("error", (e) => {
+				console.error("MapLibre error:", e);
+				mapError = e.error?.message || "Error en el mapa";
+			});
+		} catch (e) {
+			console.error("Failed to load maplibre-gl:", e);
+			mapError = e instanceof Error ? e.message : "No se pudo cargar el mapa";
+		}
 	}
 
 	onMount(() => {
@@ -112,7 +128,15 @@
 		</div>
 	</div>
 	<div class="map-container">
-		<div bind:this={mapContainer} class="map-element"></div>
+		{#if mapError}
+			<div class="map-error">
+				<h3>❌ Error cargando el mapa</h3>
+				<p>{mapError}</p>
+				<p class="hint">Verifica que el servidor de tiles esté corriendo en http://127.0.0.1:8765</p>
+			</div>
+		{:else}
+			<div bind:this={mapContainer} class="map-element"></div>
+		{/if}
 	</div>
 	<ServerStatus />
 	<ServerAliveIndicator />
@@ -194,5 +218,35 @@
 		left: 0;
 		width: 100%;
 		height: 100%;
+	}
+
+	.map-error {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		background: rgba(20, 20, 30, 0.95);
+		border: 2px solid #ff4444;
+		border-radius: 12px;
+		padding: 2rem;
+		text-align: center;
+		color: #ffaaaa;
+		max-width: 400px;
+		z-index: 1000;
+	}
+
+	.map-error h3 {
+		margin: 0 0 1rem 0;
+		color: #ff4444;
+	}
+
+	.map-error p {
+		margin: 0.5rem 0;
+	}
+
+	.map-error .hint {
+		font-size: 0.85rem;
+		color: #aa8888;
+		margin-top: 1rem !important;
 	}
 </style>
