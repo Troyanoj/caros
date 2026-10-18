@@ -1,6 +1,7 @@
 mod gps;
 mod tiles_server;
 
+use std::io::Write;
 use tauri::Manager;
 
 #[tauri::command]
@@ -10,7 +11,30 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let log_path = std::env::temp_dir().join("caros_debug.log");
+    let _log_file = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("[CarOS] ERROR abriendo archivo de log {:?}: {}", log_path, e);
+            std::process::exit(1);
+        }
+    };
+
     println!("[CarOS] === INICIANDO APLICACIÓN ===");
+    println!("[CarOS] Log file: {:?}", log_path);
+
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let msg = format!("[PANIC] {}\n", panic_info);
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .and_then(|mut f| f.write_all(msg.as_bytes()));
+    }));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -25,17 +49,21 @@ pub fn run() {
             println!("[CarOS] Setup callback ejecutándo...");
 
             let _window = app.get_webview_window("main");
-            println!("[CarOS] Ventana principal disponible: {:?}", _window.is_some());
+            println!(
+                "[CarOS] Ventana principal disponible: {:?}",
+                _window.is_some()
+            );
 
             tauri::async_runtime::spawn(async move {
                 println!("[tiles_server] Iniciando en background...");
                 match tiles_server::start_tiles_server().await {
                     Ok(url) => {
-                        println!("[tiles_server] ✅ Servidor iniciado en {}", url);
+                        println!("[tiles_server] Servidor iniciado en {}", url);
                     }
                     Err(e) => {
-                        eprintln!("[tiles_server] ❌ ERROR crítico: {}", e);
+                        println!("[tiles_server] ERROR crítico: {}", e);
                         println!("[tiles_server] La app continuará sin servidor de tiles");
+                        println!("[tiles_server] Inspeccione %TEMP%\\caros_debug.log para detalles");
                     }
                 }
             });

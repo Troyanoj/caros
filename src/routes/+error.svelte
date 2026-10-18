@@ -3,6 +3,7 @@
 	import { onMount } from "svelte";
 	import { get } from "svelte/store";
 	import BackendDiagnostic from "$lib/components/BackendDiagnostic.svelte";
+	import ServerAliveIndicator from "$lib/components/ServerAliveIndicator.svelte";
 
 	onMount(() => {
 		const currentPage = get(page);
@@ -48,3 +49,6 @@
 		🔄 REINTENTAR
 	</button>
 </div>
+
+<BackendDiagnostic />
+<ServerAliveIndicator />

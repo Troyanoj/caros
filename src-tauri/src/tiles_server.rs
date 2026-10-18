@@ -64,6 +64,34 @@ pub fn find_mbtiles_file(tiles_dir: &PathBuf) -> Option<PathBuf> {
 pub async fn start_tiles_server() -> Result<String, String> {
     println!("[tiles_server] === INICIANDO SERVIDOR ===");
 
+    println!("[tiles_server] Primer intento...");
+    match try_start_server_internal().await {
+        Ok(url) => {
+            println!("[tiles_server] Primer intento EXITOSO");
+            Ok(url)
+        }
+        Err(e) => {
+            println!("[tiles_server] Primer intento FALLÓ: {}", e);
+            println!("[tiles_server] Reintentando en 5 segundos...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            match try_start_server_internal().await {
+                Ok(url) => {
+                    println!("[tiles_server] Segundo intento EXITOSO");
+                    Ok(url)
+                }
+                Err(e2) => {
+                    println!("[tiles_server] Segundo intento FALLÓ: {}", e2);
+                    println!("[tiles_server] No se pudo iniciar el servidor después de 2 intentos");
+                    Err(e2)
+                }
+            }
+        }
+    }
+}
+
+async fn try_start_server_internal() -> Result<String, String> {
+    println!("[tiles_server] === INTENTO DE INICIO ===");
+
     let tiles_dir = get_tiles_dir();
     println!("[tiles_server] Directorio de tiles: {:?}", tiles_dir);
 

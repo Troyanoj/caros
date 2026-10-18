@@ -4,6 +4,7 @@
 	import { type Map as MapLibreMap, type Marker, type LngLatLike, type StyleSpecification } from "maplibre-gl";
 	import type { GpsData } from "$lib/stores/gpsStore";
 	import ServerStatus from "./ServerStatus.svelte";
+	import ServerAliveIndicator from "./ServerAliveIndicator.svelte";
 
 	import "maplibre-gl/dist/maplibre-gl.css";
 	import "$lib/styles/global.css";
@@ -114,6 +115,7 @@
 		<div bind:this={mapContainer} class="map-element"></div>
 	</div>
 	<ServerStatus />
+	<ServerAliveIndicator />
 </div>
 
 <style>

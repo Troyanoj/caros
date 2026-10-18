@@ -3,6 +3,7 @@
 	import { onNavigate } from "$app/navigation";
 	import ServerStatus from "./ServerStatus.svelte";
 	import BackendDiagnostic from "./BackendDiagnostic.svelte";
+	import ServerAliveIndicator from "./ServerAliveIndicator.svelte";
 
 	function handleNavigate(path: string): void {
 		if (path === "/navigate") {
@@ -38,6 +39,7 @@
 		</button>
 	</div>
 	<ServerStatus />
+	<ServerAliveIndicator />
 	<BackendDiagnostic />
 </main>
 
