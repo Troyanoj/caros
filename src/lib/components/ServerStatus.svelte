@@ -21,20 +21,30 @@
 		errorMessage = "";
 
 		try {
-			const response = await fetch(`${TILE_SERVER_URL}/health`, {
+			const response = await fetch(`${TILE_SERVER_URL}/ping`, {
 				method: "GET",
-				mode: "no-cors",
 				signal: AbortSignal.timeout(5000),
 			});
 
 			if (!response.ok) {
 				healthStatus = "error";
-				errorMessage = `HTTP ${response.status} ${response.statusText}`;
+				errorMessage = `HTTP ${response.status} ${response.statusText} en /ping`;
+				return;
+			}
+
+			const healthResponse = await fetch(`${TILE_SERVER_URL}/health`, {
+				method: "GET",
+				signal: AbortSignal.timeout(5000),
+			});
+
+			if (!healthResponse.ok) {
+				healthStatus = "error";
+				errorMessage = `HTTP ${healthResponse.status} ${healthResponse.statusText} en /health`;
 				return;
 			}
 
 			try {
-				const data: HealthResponse = await response.json();
+				const data: HealthResponse = await healthResponse.json();
 				healthData = data;
 				healthStatus = "ok";
 			} catch (parseError) {
@@ -45,7 +55,7 @@
 			if (e instanceof DOMException && e.name === "AbortError") {
 				errorMessage = "Timeout: El servidor no respondió en 5 segundos";
 			} else if (e instanceof TypeError) {
-				errorMessage = `Error de red: ${e.message}`;
+				errorMessage = `Error de conexión: ${e.message}`;
 			} else {
 				errorMessage = e instanceof Error ? e.message : String(e);
 			}

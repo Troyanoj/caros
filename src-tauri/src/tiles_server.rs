@@ -99,6 +99,7 @@ pub async fn start_tiles_server() -> Result<String, String> {
     });
 
     let app = Router::new()
+        .route("/ping", get(ping))
         .route("/health", get(health_check))
         .route("/tiles/{z}/{x}/{y}.pbf", get(get_tile))
         .route("/metadata", get(get_metadata))
@@ -118,6 +119,11 @@ pub async fn start_tiles_server() -> Result<String, String> {
     });
 
     Ok(format!("http://{}", addr))
+}
+
+async fn ping() -> &'static str {
+    println!("[tiles_server] PING recibido - servidor está vivo");
+    "PONG - Servidor de tiles CarOS OK"
 }
 
 async fn health_check(State(state): State<Arc<TilesState>>) -> impl IntoResponse {
