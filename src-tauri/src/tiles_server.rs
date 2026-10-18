@@ -8,10 +8,23 @@ use axum::{
 use lru::LruCache;
 use rusqlite::Connection;
 use serde_json::json;
+use std::io::Write;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+fn log_to_file(msg: &str) {
+    let log_path = std::env::temp_dir().join("caros_debug.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        let _ = writeln!(f, "{}", msg);
+        let _ = f.flush();
+    }
+}
 
 pub struct TilesState {
     pub db_path: PathBuf,
@@ -90,25 +103,37 @@ pub async fn start_tiles_server() -> Result<String, String> {
 }
 
 async fn try_start_server_internal() -> Result<String, String> {
-    println!("[tiles_server] === INTENTO DE INICIO ===");
+    let log = "[tiles_server] === INTENTO DE INICIO ===";
+    println!("{}", log);
+    log_to_file(log);
 
     let tiles_dir = get_tiles_dir();
-    println!("[tiles_server] Directorio de tiles: {:?}", tiles_dir);
+    let log = format!("[tiles_server] Directorio de tiles: {:?}", tiles_dir);
+    println!("{}", log);
+    log_to_file(&log);
 
     std::fs::create_dir_all(&tiles_dir).map_err(|e| {
-        println!("[tiles_server] ERROR creando directorio: {}", e);
+        let log = format!("[tiles_server] ERROR creando directorio: {}", e);
+        println!("{}", log);
+        log_to_file(&log);
         format!("Error creando directorio: {}", e)
     })?;
-    println!("[tiles_server] Directorio verificado/creado");
+    let log = "[tiles_server] Directorio verificado/creado";
+    println!("{}", log);
+    log_to_file(log);
 
     let mbtiles_path = find_mbtiles_file(&tiles_dir).ok_or_else(|| {
         let msg = format!("No se encontró archivo .mbtiles en {:?}", tiles_dir);
         println!("[tiles_server] ERROR: {}", msg);
+        log_to_file(&format!("[tiles_server] ERROR: {}", msg));
         msg
     })?;
 
-    println!("[tiles_server] Archivo MBTiles encontrado: {:?}", mbtiles_path);
+    let log = format!("[tiles_server] Archivo MBTiles encontrado: {:?}", mbtiles_path);
+    println!("{}", log);
+    log_to_file(&log);
     println!("[tiles_server] Intentando abrir conexión SQLite para validación...");
+    log_to_file("[tiles_server] Intentando abrir conexión SQLite para validación...");
 
     let (_tables, _tile_count) = {
         let conn = match Connection::open(&mbtiles_path) {
@@ -116,16 +141,21 @@ async fn try_start_server_internal() -> Result<String, String> {
             Err(e) => {
                 println!("[tiles_server] ERROR abriendo SQLite: {}", e);
                 println!("[tiles_server] Detalles del error: {:?}", e);
+                log_to_file(&format!("[tiles_server] ERROR abriendo SQLite: {}", e,));
+                log_to_file(&format!("[tiles_server] Detalles del error: {:?}", e));
                 return Err(format!("Error abriendo base de datos: {}", e));
             }
         };
         println!("[tiles_server] Conexión SQLite exitosa");
+        log_to_file("[tiles_server] Conexión SQLite exitosa");
 
         println!("[tiles_server] Verificando esquema de base de datos...");
+        log_to_file("[tiles_server] Verificando esquema de base de datos...");
         let mut stmt = match conn.prepare("SELECT name FROM sqlite_master WHERE type='table'") {
             Ok(s) => s,
             Err(e) => {
                 println!("[tiles_server] ERROR consultando tablas: {}", e);
+                log_to_file(&format!("[tiles_server] ERROR consultando tablas: {}", e));
                 return Err(format!("Error consultando esquema: {}", e));
             }
         };
@@ -134,33 +164,42 @@ async fn try_start_server_internal() -> Result<String, String> {
             Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
             Err(e) => {
                 println!("[tiles_server] ERROR mapeando tablas: {}", e);
+                log_to_file(&format!("[tiles_server] ERROR mapeando tablas: {}", e));
                 return Err(format!("Error mapeando tablas: {}", e));
             }
         };
 
-        println!("[tiles_server] Tablas encontradas: {:?}", tables);
+        let tables_log = format!("[tiles_server] Tablas encontradas: {:?}", tables);
+        println!("{}", tables_log);
+        log_to_file(&tables_log);
 
         if !tables.contains(&"tiles".to_string()) {
             println!("[tiles_server] ERROR CRITICO: La tabla 'tiles' no existe");
+            log_to_file("[tiles_server] ERROR CRITICO: La tabla 'tiles' no existe");
             return Err("El archivo MBTiles no tiene la tabla 'tiles'".to_string());
         }
 
         if !tables.contains(&"metadata".to_string()) {
             println!("[tiles_server] WARNING: La tabla 'metadata' no existe");
+            log_to_file("[tiles_server] WARNING: La tabla 'metadata' no existe");
         }
 
         let tile_count: i64 = match conn.query_row("SELECT COUNT(*) FROM tiles", [], |row| row.get(0)) {
             Ok(c) => c,
             Err(e) => {
                 println!("[tiles_server] ERROR contando tiles: {}", e);
+                log_to_file(&format!("[tiles_server] ERROR contando tiles: {}", e));
                 0
             }
         };
 
-        println!("[tiles_server] Total de tiles en la base de datos: {}", tile_count);
+        let count_log = format!("[tiles_server] Total de tiles en la base de datos: {}", tile_count);
+        println!("{}", count_log);
+        log_to_file(&count_log);
 
         if tile_count == 0 {
             println!("[tiles_server] WARNING: El archivo MBTiles no tiene tiles");
+            log_to_file("[tiles_server] WARNING: El archivo MBTiles no tiene tiles");
         }
 
         drop(stmt);
@@ -170,6 +209,7 @@ async fn try_start_server_internal() -> Result<String, String> {
     };
 
     println!("[tiles_server] Configurando cache LRU...");
+    log_to_file("[tiles_server] Configurando cache LRU...");
     let cache = LruCache::new(NonZeroUsize::new(500).unwrap());
     let state = Arc::new(TilesState {
         db_path: mbtiles_path.clone(),
@@ -179,6 +219,7 @@ async fn try_start_server_internal() -> Result<String, String> {
     });
 
     println!("[tiles_server] Creando router Axum...");
+    log_to_file("[tiles_server] Creando router Axum...");
     let app = Router::new()
         .route("/ping", get(ping))
         .route("/health", get(health_check))
@@ -189,20 +230,27 @@ async fn try_start_server_internal() -> Result<String, String> {
 
     let addr = "127.0.0.1:8765";
     println!("[tiles_server] Intentando bind en {}...", addr);
+    log_to_file(&format!("[tiles_server] Intentando bind en {}...", addr));
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(|e| {
-            println!("[tiles_server] ERROR binding to {}: {}", addr, e);
+            let log = format!("[tiles_server] ERROR binding to {}: {}", addr, e);
+            println!("{}", log);
+            log_to_file(&log);
             format!("Error binding to {}: {}", addr, e)
         })?;
 
     println!("[tiles_server] Servidor escuchando en http://{}", addr);
+    log_to_file(&format!("[tiles_server] Servidor escuchando en http://{}", addr));
 
     tokio::spawn(async move {
         println!("[tiles_server] Spawned server task");
+        log_to_file("[tiles_server] Spawned server task");
         if let Err(e) = axum::serve(listener, app).await {
-            println!("[tiles_server] ERROR: Servidor de tiles detenido: {}", e);
+            let log = format!("[tiles_server] ERROR: Servidor de tiles detenido: {}", e);
+            println!("{}", log);
+            log_to_file(&log);
         }
     });
 
