@@ -62,57 +62,117 @@ pub fn find_mbtiles_file(tiles_dir: &PathBuf) -> Option<PathBuf> {
 }
 
 pub async fn start_tiles_server() -> Result<String, String> {
-    println!("[tiles_server] Iniciando servidor de tiles...");
+    println!("[tiles_server] === INICIANDO SERVIDOR ===");
 
     let tiles_dir = get_tiles_dir();
     println!("[tiles_server] Directorio de tiles: {:?}", tiles_dir);
 
-    if let Err(e) = std::fs::create_dir_all(&tiles_dir) {
-        println!(
-            "[tiles_server] ERROR creando directorio de tiles {:?}: {}",
-            tiles_dir, e
-        );
-    } else {
-        println!("[tiles_server] Directorio de tiles listo: {:?}", tiles_dir);
-    }
+    std::fs::create_dir_all(&tiles_dir).map_err(|e| {
+        println!("[tiles_server] ERROR creando directorio: {}", e);
+        format!("Error creando directorio: {}", e)
+    })?;
+    println!("[tiles_server] Directorio verificado/creado");
 
-    let mbtiles_path = find_mbtiles_file(&tiles_dir);
-    let mbtiles_found = mbtiles_path.is_some();
+    let mbtiles_path = find_mbtiles_file(&tiles_dir).ok_or_else(|| {
+        let msg = format!("No se encontró archivo .mbtiles en {:?}", tiles_dir);
+        println!("[tiles_server] ERROR: {}", msg);
+        msg
+    })?;
 
-    if !mbtiles_found {
-        println!("[tiles_server] WARNING: No se encontró archivo MBTiles");
-        println!(
-            "[tiles_server] El servidor continuará funcionando pero no podrá servir tiles"
-        );
-        println!(
-            "[tiles_server] Copie un archivo .mbtiles al directorio: {:?}",
-            tiles_dir
-        );
-    }
+    println!("[tiles_server] Archivo MBTiles encontrado: {:?}", mbtiles_path);
+    println!("[tiles_server] Intentando abrir conexión SQLite para validación...");
 
+    let (_tables, _tile_count) = {
+        let conn = match Connection::open(&mbtiles_path) {
+            Ok(c) => c,
+            Err(e) => {
+                println!("[tiles_server] ERROR abriendo SQLite: {}", e);
+                println!("[tiles_server] Detalles del error: {:?}", e);
+                return Err(format!("Error abriendo base de datos: {}", e));
+            }
+        };
+        println!("[tiles_server] Conexión SQLite exitosa");
+
+        println!("[tiles_server] Verificando esquema de base de datos...");
+        let mut stmt = match conn.prepare("SELECT name FROM sqlite_master WHERE type='table'") {
+            Ok(s) => s,
+            Err(e) => {
+                println!("[tiles_server] ERROR consultando tablas: {}", e);
+                return Err(format!("Error consultando esquema: {}", e));
+            }
+        };
+
+        let tables: Vec<String> = match stmt.query_map([], |row| row.get(0)) {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(e) => {
+                println!("[tiles_server] ERROR mapeando tablas: {}", e);
+                return Err(format!("Error mapeando tablas: {}", e));
+            }
+        };
+
+        println!("[tiles_server] Tablas encontradas: {:?}", tables);
+
+        if !tables.contains(&"tiles".to_string()) {
+            println!("[tiles_server] ERROR CRITICO: La tabla 'tiles' no existe");
+            return Err("El archivo MBTiles no tiene la tabla 'tiles'".to_string());
+        }
+
+        if !tables.contains(&"metadata".to_string()) {
+            println!("[tiles_server] WARNING: La tabla 'metadata' no existe");
+        }
+
+        let tile_count: i64 = match conn.query_row("SELECT COUNT(*) FROM tiles", [], |row| row.get(0)) {
+            Ok(c) => c,
+            Err(e) => {
+                println!("[tiles_server] ERROR contando tiles: {}", e);
+                0
+            }
+        };
+
+        println!("[tiles_server] Total de tiles en la base de datos: {}", tile_count);
+
+        if tile_count == 0 {
+            println!("[tiles_server] WARNING: El archivo MBTiles no tiene tiles");
+        }
+
+        drop(stmt);
+        drop(conn);
+
+        (tables, tile_count)
+    };
+
+    println!("[tiles_server] Configurando cache LRU...");
     let cache = LruCache::new(NonZeroUsize::new(500).unwrap());
     let state = Arc::new(TilesState {
-        db_path: mbtiles_path.unwrap_or_default(),
+        db_path: mbtiles_path.clone(),
         tiles_dir,
         cache: Mutex::new(cache),
-        mbtiles_found,
+        mbtiles_found: true,
     });
 
+    println!("[tiles_server] Creando router Axum...");
     let app = Router::new()
         .route("/ping", get(ping))
         .route("/health", get(health_check))
+        .route("/debug-db", get(debug_db))
         .route("/tiles/{z}/{x}/{y}.pbf", get(get_tile))
         .route("/metadata", get(get_metadata))
-        .with_state(state.clone());
+        .with_state(state);
 
     let addr = "127.0.0.1:8765";
+    println!("[tiles_server] Intentando bind en {}...", addr);
+
     let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .map_err(|e| format!("Error binding to {}: {}", addr, e))?;
+        .map_err(|e| {
+            println!("[tiles_server] ERROR binding to {}: {}", addr, e);
+            format!("Error binding to {}: {}", addr, e)
+        })?;
 
     println!("[tiles_server] Servidor escuchando en http://{}", addr);
 
     tokio::spawn(async move {
+        println!("[tiles_server] Spawned server task");
         if let Err(e) = axum::serve(listener, app).await {
             println!("[tiles_server] ERROR: Servidor de tiles detenido: {}", e);
         }
@@ -143,6 +203,95 @@ async fn health_check(State(state): State<Arc<TilesState>>) -> impl IntoResponse
         "ok" => (StatusCode::OK, Json(response)),
         _ => (StatusCode::SERVICE_UNAVAILABLE, Json(response)),
     }
+}
+
+async fn debug_db(State(state): State<Arc<TilesState>>) -> impl IntoResponse {
+    println!("[tiles_server] /debug-db solicidado");
+
+    if !state.mbtiles_found {
+        let response = json!({
+            "error": "MBTiles file not found",
+            "tiles_dir": state.tiles_dir.to_string_lossy()
+        });
+        return (StatusCode::NOT_FOUND, Json(response)).into_response();
+    }
+
+    let result = {
+        let conn = match Connection::open(&state.db_path) {
+            Ok(c) => c,
+            Err(e) => {
+                println!("[tiles_server] ERROR abriendo DB para debug: {}", e);
+                let response = json!({ "error": format!("DB error: {}", e) });
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(response)).into_response();
+            }
+        };
+
+        let tables: Vec<String> = match conn.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name") {
+            Ok(mut stmt) => match stmt.query_map([], |row| row.get(0)) {
+                Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                Err(e) => {
+                    println!("[tiles_server] ERROR lista tablas: {}", e);
+                    let response = json!({ "error": format!("Tables error: {}", e) });
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(response)).into_response();
+                }
+            },
+            Err(e) => {
+                println!("[tiles_server] ERROR preparando tabla: {}", e);
+                let response = json!({ "error": format!("Tables prepare error: {}", e) });
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(response)).into_response();
+            }
+        };
+
+        let tile_count: i64 = match conn.query_row("SELECT COUNT(*) FROM tiles", [], |row| row.get(0)) {
+            Ok(c) => c,
+            Err(e) => {
+                println!("[tiles_server] ERROR contando tiles: {}", e);
+                0
+            }
+        };
+
+        let mut metadata = std::collections::HashMap::new();
+        if tables.contains(&"metadata".to_string()) {
+            if let Ok(mut stmt) = conn.prepare("SELECT name, value FROM metadata") {
+                if let Ok(rows) = stmt.query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                }) {
+                    for r in rows.filter_map(|x| x.ok()) {
+                        metadata.insert(r.0, r.1);
+                    }
+                }
+            }
+        }
+
+        let mut sample_tiles: Vec<serde_json::Value> = Vec::new();
+        if tables.contains(&"tiles".to_string()) {
+            if let Ok(mut stmt) = conn.prepare("SELECT zoom_level, tile_column, tile_row, LENGTH(tile_data) FROM tiles LIMIT 10") {
+                if let Ok(rows) = stmt.query_map([], |row| {
+                    Ok(json!({
+                        "zoom": row.get::<_, i64>(0)?,
+                        "x": row.get::<_, i64>(1)?,
+                        "y": row.get::<_, i64>(2)?,
+                        "size": row.get::<_, i64>(3)?
+                    }))
+                }) {
+                    for r in rows.filter_map(|x| x.ok()) {
+                        sample_tiles.push(r);
+                    }
+                }
+            }
+        }
+
+        drop(conn);
+
+        json!({
+            "tables": tables,
+            "tile_count": tile_count,
+            "metadata": metadata,
+            "sample_tiles": sample_tiles
+        })
+    };
+
+    (StatusCode::OK, Json(result)).into_response()
 }
 
 async fn get_tile(
