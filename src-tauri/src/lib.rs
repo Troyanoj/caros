@@ -18,7 +18,8 @@ pub fn run() {
             greet,
             gps::get_gps_position,
             gps::scan_gps_devices,
-            tiles_server::get_tiles_server_status
+            tiles_server::get_tiles_server_status,
+            tiles_server::get_backend_status
         ])
         .setup(|app| {
             println!("[CarOS] Setup callback ejecutándo...");

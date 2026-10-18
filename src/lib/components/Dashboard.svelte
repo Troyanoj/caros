@@ -2,6 +2,7 @@
 	import { gpsStore } from "$lib/stores/gpsStore";
 	import { onNavigate } from "$app/navigation";
 	import ServerStatus from "./ServerStatus.svelte";
+	import BackendDiagnostic from "./BackendDiagnostic.svelte";
 
 	function handleNavigate(path: string): void {
 		if (path === "/navigate") {
@@ -37,6 +38,7 @@
 		</button>
 	</div>
 	<ServerStatus />
+	<BackendDiagnostic />
 </main>
 
 <style>

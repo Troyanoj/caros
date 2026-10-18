@@ -298,3 +298,74 @@ pub fn get_tiles_server_status() -> Result<String, String> {
         Err(format!("No MBTiles file found in {:?}", tiles_dir))
     }
 }
+
+#[derive(serde::Serialize)]
+pub struct BackendStatus {
+    pub tiles_dir: String,
+    pub tiles_dir_exists: bool,
+    pub mbtiles_found: bool,
+    pub mbtiles_path: String,
+    pub mbtiles_exists: bool,
+    pub appdata: String,
+    pub port: String,
+    pub all_mbtiles_files: Vec<String>,
+}
+
+#[tauri::command]
+pub fn get_backend_status() -> BackendStatus {
+    println!("[tiles_server] get_backend_status solicitado");
+
+    let tiles_dir = get_tiles_dir();
+    let appdata = std::env::var("APPDATA").unwrap_or_else(|_| "UNKNOWN".to_string());
+
+    let tiles_dir_exists = tiles_dir.exists();
+    println!("[tiles_server] Directorio de tiles existe: {}", tiles_dir_exists);
+    println!("[tiles_server] Ruta del directorio: {:?}", tiles_dir);
+
+    let (mbtiles_found, mbtiles_path, all_mbtiles_files) = if tiles_dir_exists {
+        match std::fs::read_dir(&tiles_dir) {
+            Ok(entries) => {
+                let files: Vec<String> = entries
+                    .filter_map(|e| e.ok())
+                    .filter_map(|e| {
+                        let p = e.path();
+                        if p.extension().map_or(false, |ext| ext == "mbtiles") {
+                            Some(p.to_string_lossy().to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                let found = !files.is_empty();
+                let first_path = files.first().cloned().unwrap_or_default();
+                println!("[tiles_server] Archivos MBTiles encontrados: {:?}", files);
+                (found, first_path, files)
+            }
+            Err(e) => {
+                println!("[tiles_server] Error leyendo directorio: {}", e);
+                (false, "".to_string(), vec![])
+            }
+        }
+    } else {
+        println!("[tiles_server] El directorio de tiles NO existe");
+        (false, "".to_string(), vec![])
+    };
+
+    let status = BackendStatus {
+        tiles_dir: tiles_dir.to_string_lossy().to_string(),
+        tiles_dir_exists,
+        mbtiles_found,
+        mbtiles_path,
+        mbtiles_exists: mbtiles_found,
+        appdata,
+        port: "127.0.0.1:8765".to_string(),
+        all_mbtiles_files,
+    };
+
+    println!(
+        "[tiles_server] Status: tiles_dir_exists={}, mbtiles_found={}, appdata={}",
+        tiles_dir_exists, mbtiles_found, status.appdata
+    );
+
+    status
+}

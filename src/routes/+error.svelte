@@ -2,6 +2,7 @@
 	import { page } from "$app/stores";
 	import { onMount } from "svelte";
 	import { get } from "svelte/store";
+	import BackendDiagnostic from "$lib/components/BackendDiagnostic.svelte";
 
 	onMount(() => {
 		const currentPage = get(page);
@@ -24,9 +25,11 @@
 	});
 </script>
 
+<BackendDiagnostic />
+
 <div
 	class="error-page"
-	style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #1a1a1a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: monospace; z-index: 9999;"
+	style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #1a1a1a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: monospace; z-index: 1;"
 >
 	<h1 style="color: #ff4444; font-size: 2rem; margin-bottom: 20px;">🛑 ERROR 500 DETECTADO</h1>
 	<p style="font-size: 1.2rem; margin: 10px 0;">Estado HTTP: {$page.status}</p>
