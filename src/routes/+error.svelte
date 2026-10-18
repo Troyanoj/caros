@@ -5,6 +5,11 @@
 	import BackendDiagnostic from "$lib/components/BackendDiagnostic.svelte";
 	import ServerAliveIndicator from "$lib/components/ServerAliveIndicator.svelte";
 
+	function forceReload(): void {
+		console.log("[ERROR PAGE] Forzando recarga completa...");
+		window.location.href = window.location.href;
+	}
+
 	onMount(() => {
 		const currentPage = get(page);
 		console.log("[error] Página de error renderizada. Status:", currentPage.status);
@@ -44,8 +49,9 @@
 		<li>• Error en la inicialización de Tauri</li>
 	</ul>
 	<button
-		onclick={() => window.location.reload()}
-		style="margin-top: 30px; padding: 20px 40px; font-size: 20px; background: #2563eb; color: white; border: none; border-radius: 12px; cursor: pointer;">
+		onclick={forceReload}
+		style="margin-top: 30px; padding: 20px 40px; font-size: 20px; background: #2563eb; color: white; border: none; border-radius: 12px; cursor: pointer;"
+	>
 		🔄 REINTENTAR
 	</button>
 </div>

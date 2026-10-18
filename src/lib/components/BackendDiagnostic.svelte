@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { invoke } from "@tauri-apps/api/core";
+	import { openPath } from "@tauri-apps/plugin-opener";
 	import { onMount } from "svelte";
 
 	interface BackendStatus {
@@ -31,10 +32,23 @@
 		}
 	}
 
-	function openTilesDir(): void {
-		if (status?.tiles_dir) {
-			invoke("plugin:opener|open_path", { path: status.tiles_dir })
-				.catch((e) => console.error("No se pudo abrir la carpeta:", e));
+	async function openTilesDir(): Promise<void> {
+		if (!status?.tiles_dir) {
+			console.warn("[BackendDiagnostic] No tiles directory available");
+			return;
+		}
+
+		console.log("[BackendDiagnostic] Intentando abrir carpeta:", status.tiles_dir);
+
+		try {
+			await openPath(status.tiles_dir);
+			console.log("[BackendDiagnostic] Carpeta abierta exitosamente:", status.tiles_dir);
+		} catch (e) {
+			const errorMsg = e instanceof Error ? e.message : String(e);
+			console.error("[BackendDiagnostic] Error al abrir carpeta:", errorMsg);
+			alert(
+				`No se pudo abrir la carpeta de tiles.\n\nRuta: ${status.tiles_dir}\n\nError: ${errorMsg}\n\nIntente abrir la carpeta manualmente en el Explorador de archivos.`
+			);
 		}
 	}
 
