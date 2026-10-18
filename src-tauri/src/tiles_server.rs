@@ -13,6 +13,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tower_http::cors::CorsLayer;
 
 fn log_to_file(msg: &str) {
     let log_path = std::env::temp_dir().join("caros_debug.log");
@@ -220,12 +221,18 @@ async fn try_start_server_internal() -> Result<String, String> {
 
     println!("[tiles_server] Creando router Axum...");
     log_to_file("[tiles_server] Creando router Axum...");
+    
+    // Configurar CORS permisivo para permitir peticiones desde Tauri WebView
+    let cors = CorsLayer::permissive();
+    log_to_file("[tiles_server] CORS configurado: permissive");
+    
     let app = Router::new()
         .route("/ping", get(ping))
         .route("/health", get(health_check))
         .route("/debug-db", get(debug_db))
         .route("/tiles/{z}/{x}/{y}.pbf", get(get_tile))
         .route("/metadata", get(get_metadata))
+        .layer(cors)
         .with_state(state);
 
     let addr = "127.0.0.1:8765";
